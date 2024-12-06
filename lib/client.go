@@ -10,12 +10,16 @@ import (
 	"time"
 )
 
+type Config struct {
+	Addr       string
+	Collection string
+}
+
 type TempDBClient struct {
-	conn   net.Conn
-	addr   string
-	dbName string
-	apiKey string
-	mu     sync.Mutex
+	conn      net.Conn
+	addr      string
+	collection string
+	mu        sync.Mutex
 }
 
 type clientPool struct {
@@ -25,7 +29,7 @@ type clientPool struct {
 
 var pool *clientPool
 
-func NewClient(addr, dbName, apiKey string) (*TempDBClient, error) {
+func NewClient(config Config) (*TempDBClient, error) {
 	if pool == nil {
 		pool = &clientPool{
 			clients: make(chan *TempDBClient, 10),
@@ -35,21 +39,22 @@ func NewClient(addr, dbName, apiKey string) (*TempDBClient, error) {
 
 	select {
 	case client := <-pool.clients:
-		if err := client.ping(); err != nil {
-			return createClient(addr, dbName, apiKey)
+		_, err := client.Ping()
+		if err != nil {
+			return createClient(config)
 		}
 		return client, nil
 	default:
-		return createClient(addr, dbName, apiKey)
+		return createClient(config)
 	}
 }
 
-func createClient(addr, dbName, apiKey string) (*TempDBClient, error) {
-	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+func createClient(config Config) (*TempDBClient, error) {
+	conn, err := net.DialTimeout("tcp", config.Addr, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("connection error: %w", err)
 	}
-	return &TempDBClient{conn: conn, addr: addr, dbName: dbName, apiKey: apiKey}, nil
+	return &TempDBClient{conn: conn, addr: config.Addr, collection: config.Collection}, nil
 }
 
 func (c *TempDBClient) Close() {
@@ -60,18 +65,18 @@ func (c *TempDBClient) Close() {
 	}
 }
 
-func (c *TempDBClient) ping() error {
-	_, err := c.sendCommand("PING")
-	return err
+func (c *TempDBClient) Ping() (string, error) {
+	pong, err := c.sendCommand("PING")
+	return pong, err
 }
 
-func Client(addr, dbName, apiKey string) (*TempDBClient, error) {
+func Client(addr, collection string) (*TempDBClient, error) {
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("connection error: %w", err)
 	}
 
-	client := &TempDBClient{conn: conn, addr: addr, dbName: dbName, apiKey: apiKey}
+	client := &TempDBClient{conn: conn, addr: addr, collection: collection}
 
 	return client, nil
 }
@@ -80,7 +85,7 @@ func (c *TempDBClient) sendCommand(command string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	fullCommand := fmt.Sprintf("%s %s", c.apiKey, command)
+	fullCommand := fmt.Sprintf("%s %s", c.collection, command)
 	_, err := fmt.Fprintf(c.conn, fullCommand+"\r\n")
 	if err != nil {
 		return "", err
@@ -92,14 +97,6 @@ func (c *TempDBClient) sendCommand(command string) (string, error) {
 	}
 
 	return strings.TrimSpace(response), nil
-}
-
-func (c *TempDBClient) CreateDB(email, tier, dbName string) (string, error) {
-	return c.sendCommand(fmt.Sprintf("CREATE_DB %s %s %s", email, tier, dbName))
-}
-
-func (c *TempDBClient) UpdateToken(email, db_name string) (string, error) {
-	return c.sendCommand(fmt.Sprintf("UPDATE_TOKEN %s %s", email, db_name))
 }
 
 func (c *TempDBClient) Set(key, value string) (string, error) {
