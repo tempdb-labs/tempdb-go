@@ -16,10 +16,10 @@ type Config struct {
 }
 
 type TempDBClient struct {
-	conn      net.Conn
-	addr      string
+	conn       net.Conn
+	addr       string
 	collection string
-	mu        sync.Mutex
+	mu         sync.Mutex
 }
 
 type clientPool struct {
@@ -141,4 +141,28 @@ func (c *TempDBClient) ViewData() (string, error) {
 
 func (c *TempDBClient) GetDB() (string, error) {
 	return c.sendCommand("GET_DB")
+}
+
+// Command: SESSION_CREATE
+func (c *TempDBClient) CreateSession(userID string) (string, error) {
+	command := fmt.Sprintf("SESSION_CREATE %s", userID)
+	return c.sendCommand(command)
+}
+
+// Command: SESSION_GET
+func (c *TempDBClient) GetSession(sessionID string) (string, error) {
+	command := fmt.Sprintf("SESSION_GET %s", sessionID)
+	return c.sendCommand(command)
+}
+
+// Command: SESSION_SET
+func (c *TempDBClient) SetSession(sessionID, key, value string) (string, error) {
+	command := fmt.Sprintf("SESSION_SET %s %s %s", sessionID, key, value)
+	return c.sendCommand(command)
+}
+
+// Command: SESSION_DELETE
+func (c *TempDBClient) DeleteSession(sessionID string) (string, error) {
+	command := fmt.Sprintf("SESSION_DELETE %s", sessionID)
+	return c.sendCommand(command)
 }

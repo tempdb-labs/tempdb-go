@@ -9,8 +9,8 @@ import (
 
 func main() {
 	client, err := tempdb.NewClient(tempdb.Config{
-		Addr:      "0.0.0.0:8080",
-		Collection: "tempdb-labs",
+		Addr:       "0.0.0.0:8080",
+		Collection: "tempdb://admin:admin@workspace:8020/ecommerce",
 	})
 	if err != nil {
 		log.Fatalf("Failed to get client: %v", err)
