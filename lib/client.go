@@ -91,12 +91,41 @@ func (c *TempDBClient) sendCommand(command string) (string, error) {
 		return "", err
 	}
 
-	response, err := bufio.NewReader(c.conn).ReadString('\n')
+	var response strings.Builder
+	reader := bufio.NewReader(c.conn)
+
+	line, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err
 	}
 
-	return strings.TrimSpace(response), nil
+	if strings.TrimSpace(line)[0] == '{' {
+		response.WriteString(line)
+		bracketCount := 1
+
+		// Keep reading until we have matching brackets
+		for bracketCount > 0 {
+			line, err = reader.ReadString('\n')
+			if err != nil {
+				return "", err
+			}
+			response.WriteString(line)
+
+			// Count brackets in this line
+			for _, char := range line {
+				if char == '{' {
+					bracketCount++
+				} else if char == '}' {
+					bracketCount--
+				}
+			}
+		}
+	} else {
+		// For non-JSON responses, just return the single line
+		response.WriteString(line)
+	}
+
+	return strings.TrimSpace(response.String()), nil
 }
 
 func (c *TempDBClient) Set(key, value string) (string, error) {
