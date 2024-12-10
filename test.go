@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	tempdb "github.com/ThembinkosiThemba/tempdb-go/lib"
+	tempdb "github.com/tempdb-labs/tempdb-go/lib"
 )
 
 func main() {
