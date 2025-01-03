@@ -1,30 +1,37 @@
+// Package lib provides a client library for interacting with TempDB.
+// It includes functionality for creating and managing database clients, constructing and executing queries,
+// and performing various database operations such as setting and getting values, managing sessions, and more.
+
 package lib
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
-	"strings"
 	"sync"
 	"time"
 )
 
+// Config holds the configuration for connecting to TempDB.
 type Config struct {
-	Addr       string
-	Collection string
+	Addr string // Addr is the address of the TempDB server.
+	URL  string // URL is the URL of the collection.
 }
 
+// TempDBClient represents a client connection to TempDB.
 type TempDBClient struct {
-	conn       net.Conn
-	addr       string
-	collection string
-	mu         sync.Mutex
+	conn      net.Conn   // conn is the network connection to the TempDB server.
+	addr      string     // addr is the address of the TempDB server.
+	urlString string     // urlString contains the full URL of the collection.
+	mu        sync.Mutex // mu is a mutex to ensure thread-safe operations.
 }
 
+// clientPool manages a pool of TempDBClient connections.
 type clientPool struct {
-	clients chan *TempDBClient
-	size    int
+	clients chan *TempDBClient // clients is a channel of TempDBClient pointers.
+	size    int                // size is the maximum number of clients in the pool.
 }
 
 var pool *clientPool
@@ -54,7 +61,7 @@ func createClient(config Config) (*TempDBClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connection error: %w", err)
 	}
-	return &TempDBClient{conn: conn, addr: config.Addr, collection: config.Collection}, nil
+	return &TempDBClient{conn: conn, addr: config.Addr, urlString: config.URL}, nil
 }
 
 func (c *TempDBClient) Close() {
@@ -65,133 +72,159 @@ func (c *TempDBClient) Close() {
 	}
 }
 
-func (c *TempDBClient) Ping() (string, error) {
+func (c *TempDBClient) Ping() (interface{}, error) {
 	pong, err := c.sendCommand("PING")
 	return pong, err
 }
 
-func Client(addr, collection string) (*TempDBClient, error) {
+func Client(addr, url string) (*TempDBClient, error) {
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("connection error: %w", err)
 	}
 
-	client := &TempDBClient{conn: conn, addr: addr, collection: collection}
+	client := &TempDBClient{conn: conn, addr: addr, urlString: url}
 
 	return client, nil
 }
 
-func (c *TempDBClient) sendCommand(command string) (string, error) {
+func (c *TempDBClient) sendCommand(command string) (interface{}, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	fullCommand := fmt.Sprintf("%s %s", c.collection, command)
-	_, err := fmt.Fprintf(c.conn, fullCommand+"\r\n")
+	fullCommand := fmt.Sprintf("%s %s", c.urlString, command)
+	_, err := fmt.Fprintf(c.conn, "%s", fullCommand+"\r\n")
 	if err != nil {
 		return "", err
 	}
 
-	var response strings.Builder
 	reader := bufio.NewReader(c.conn)
-
-	line, err := reader.ReadString('\n')
+	respBytes, err := reader.ReadBytes('\n')
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	if strings.TrimSpace(line)[0] == '{' {
-		response.WriteString(line)
-		bracketCount := 1
-
-		// Keep reading until we have matching brackets
-		for bracketCount > 0 {
-			line, err = reader.ReadString('\n')
-			if err != nil {
-				return "", err
-			}
-			response.WriteString(line)
-
-			// Count brackets in this line
-			for _, char := range line {
-				if char == '{' {
-					bracketCount++
-				} else if char == '}' {
-					bracketCount--
-				}
-			}
-		}
-	} else {
-		// For non-JSON responses, just return the single line
-		response.WriteString(line)
+	var response Response
+	if err := json.Unmarshal(respBytes, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse reponse: %w", err)
 	}
 
-	return strings.TrimSpace(response.String()), nil
+	if response.Status == "error" {
+		return nil, fmt.Errorf("%s", response.Message)
+	}
+
+	var responseData ResponseData
+	if err := json.Unmarshal(response.Data, &responseData); err != nil {
+		return nil, fmt.Errorf("failed to parse response data: %w", err)
+	}
+
+	var result interface{}
+	switch responseData.Type {
+	case "String":
+		var s string
+		json.Unmarshal(responseData.Data, &s)
+		result = s
+	case "Json":
+		var j interface{}
+		json.Unmarshal(responseData.Data, &j)
+		result = j
+	case "List":
+		var l []string
+		json.Unmarshal(responseData.Data, &l)
+		result = l
+	case "Set":
+		var s []string
+		json.Unmarshal(responseData.Data, &s)
+		result = s
+	case "Batch":
+		var b map[string]string
+		json.Unmarshal(responseData.Data, &b)
+		result = b
+	}
+
+	return result, nil
 }
 
-func (c *TempDBClient) Set(key, value string) (string, error) {
-	return c.sendCommand(fmt.Sprintf("SET %s %s", key, value))
+func (c *TempDBClient) Set(key, value string) error {
+	_, err := c.sendCommand(fmt.Sprintf("SET %s %s", key, value))
+	return err
 }
 
 func (c *TempDBClient) GetByKey(key string) (string, error) {
-	return c.sendCommand(fmt.Sprintf("GET_KEY %s", key))
+	result, err := c.sendCommand(fmt.Sprintf("GET_KEY %s", key))
+	if err != nil {
+		return "", err
+	}
+
+	// Format the response
+	formatted, err := formatResponse(result)
+	if err != nil {
+		return "", err
+	}
+	return formatted, nil
 }
 
-func (c *TempDBClient) SetEx(key string, seconds int, value string) (string, error) {
+func (c *TempDBClient) SetEx(key string, seconds int, value string) (interface{}, error) {
 	return c.sendCommand(fmt.Sprintf("SETEX %s %d %s", key, seconds, value))
 }
 
-func (c *TempDBClient) Delete(key string) (string, error) {
+func (c *TempDBClient) Delete(key string) (interface{}, error) {
 	return c.sendCommand(fmt.Sprintf("DELETE %s", key))
 }
 
-func (c *TempDBClient) LPush(key, value string) (string, error) {
+func (c *TempDBClient) LPush(key, value string) (interface{}, error) {
 	return c.sendCommand(fmt.Sprintf("LPUSH %s %s\r\n", key, value))
 }
 
-func (c *TempDBClient) SAdd(key, value string) (string, error) {
+func (c *TempDBClient) SAdd(key, value string) (interface{}, error) {
 	return c.sendCommand(fmt.Sprintf("SADD %s %s", key, value))
 }
 
-func (c *TempDBClient) Store(key string, value interface{}) (string, error) {
+func (c *TempDBClient) Store(key string, value interface{}) (interface{}, error) {
 	jsonValue, err := json.Marshal(value)
 	if err != nil {
 		return "", err
 	}
+	log.Println("json value: ", string(jsonValue))
 	return c.sendCommand(fmt.Sprintf("STORE %s %s", key, string(jsonValue)))
 }
 
-func (c *TempDBClient) GetFieldByKey(key, field string) (string, error) {
+func (c *TempDBClient) StoreBatch(entries map[string]interface{}) (interface{}, error) {
+	jsonValue, err := json.Marshal(entries)
+	if err != nil {
+		return "", err
+	}
+	return c.sendCommand(fmt.Sprintf("STOREBATCH %s", string(jsonValue)))
+}
+
+func (c *TempDBClient) GetFieldByKey(key, field string) (interface{}, error) {
 	return c.sendCommand(fmt.Sprintf("GET_FIELD %s /%s", key, field))
 }
 
-func (c *TempDBClient) ViewData() (string, error) {
+func (c *TempDBClient) ViewData() (interface{}, error) {
 	return c.sendCommand("VIEW_DATA")
 }
 
-func (c *TempDBClient) GetDB() (string, error) {
-	return c.sendCommand("GET_DB")
-}
-
 // Command: SESSION_CREATE
-func (c *TempDBClient) CreateSession(userID string) (string, error) {
+func (c *TempDBClient) CreateSession(userID string) (interface{}, error) {
 	command := fmt.Sprintf("SESSION_CREATE %s", userID)
 	return c.sendCommand(command)
 }
 
 // Command: SESSION_GET
-func (c *TempDBClient) GetSession(sessionID string) (string, error) {
+func (c *TempDBClient) GetSession(sessionID string) (interface{}, error) {
 	command := fmt.Sprintf("SESSION_GET %s", sessionID)
 	return c.sendCommand(command)
 }
 
 // Command: SESSION_SET
-func (c *TempDBClient) SetSession(sessionID, key, value string) (string, error) {
+func (c *TempDBClient) SetSession(sessionID, key, value string) (interface{}, error) {
 	command := fmt.Sprintf("SESSION_SET %s %s %s", sessionID, key, value)
 	return c.sendCommand(command)
 }
 
 // Command: SESSION_DELETE
-func (c *TempDBClient) DeleteSession(sessionID string) (string, error) {
+func (c *TempDBClient) DeleteSession(sessionID string) (interface{}, error) {
 	command := fmt.Sprintf("SESSION_DELETE %s", sessionID)
 	return c.sendCommand(command)
 }
