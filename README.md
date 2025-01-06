@@ -1,66 +1,91 @@
 # Go
 
-This is a Go client library for interacting with the TempDB server.
+This is a Go client library for interacting with the TempDB server. It provides an interface to connect, store, retrieve, and manage data within a TempDB database.
 
 ## Installation
 
 To use this client in your Go project, run:
 
 ```sh
-go get github.com/ThembinkosiThemba/tempdb-go/lib
+go get github.com/tempdb-labs/tempdb-go/lib
 ```
 
 ## Usage
 
-Here's a basic example of how to use the TempDB Go client:
+Here's an example of how to use the TempDB Go client:
 
 ```go
 package main
 
 import (
-	"fmt"
 	"log"
-
-	tempdb "github.com/ThembinkosiThemba/tempdb-go/lib"
+	tempdb "github.com/tempdb-labs/tempdb-go/lib"
 )
 
 func main() {
-	apiKey := os.Getenv("API_KEY")
-	/// The NewCLient function initialises the client and takes 3 parameters
-	/// 1. The address, either locally is ran there, or on a hosted client which is comming soon.
-	/// 2. The database, this is the database you will be using to store data using the client.
-	/// 3. Token, for access control, you will need to provide
-	client, err := tempdb.NewClient("db-server-url", "ecommerce-store", apiKey)
+	client, err := tempdb.NewClient(tempdb.Config{
+		Addr: "0.0.0.0:8081",
+		URL:  "tempdb://admin:admin@workspace:8020/ecommerce",
+	})
 	if err != nil {
 		log.Fatalf("Failed to get client: %v", err)
 	}
 	defer client.Close()
 
-	// Example usage when storing product information
-	response, err := client.Store("productX", map[string]interface{}{
-		"name":      "Laptop",
-		"price":     999.99,
-		"stock":     50,
-		"Locations": "US",
-	})
-	if err != nil {
-		log.Printf("Error setting user info: %v", err)
-	} else {
-		fmt.Println("Set user info response:", response)
-
+	user := map[string]interface{}{
+		"name":    "Thembinkosi",
+		"surname": "Mkhonta",
+		"preferences": map[string]interface{}{
+			"mode":          "dark",
+			"notifications": "no",
+		},
 	}
 
-	// getting a particular product information
-	getProductInfo, err := client.GetByKey("productX")
+	result, err := client.Store("user_01", user)
 	if err != nil {
-		log.Println("failed to get :", err)
-	} else {
-		log.Println("data: ", getProductInfo)
+		log.Printf("Failed to store user: %v", err)
+		return
 	}
+
+	log.Printf("User stored successfully: %v", result)
 }
-
 ```
 
-Open this [file](test.go) for examples.
+### Key Features and Functions
 
-All methods return an error as the last return value. Always check this error to ensure your operations were successful.
+- **Client Initialization**: Create a new client using `NewClient` with `Config` containing the server address and collection URL.
+- **Data Storage**: Use `Store` to add structured data into TempDB.
+- **Data Retrieval**: Use `GetByKey` to fetch data by its key.
+- **Session Management**: Includes commands for creating, fetching, modifying, and deleting sessions.
+- **Batch Operations**: Use `StoreBatch` to insert multiple entries at once.
+- **Other Commands**:
+  - `Set`: Store a key-value pair.
+  - `SetEx`: Store a key-value pair with an expiry.
+  - `Delete`: Remove a key from the database.
+  - `LPush`: Push a value onto a list.
+  - `SAdd`: Add a value to a set.
+  - `GetFieldByKey`: Retrieve specific fields within a key.
+  - `ViewData`: View all data in the database.
+
+### Example for Data Retrieval
+
+```go
+getProductInfo, err := client.GetByKey("user_01")
+if err != nil {
+	log.Printf("Failed to get product: %v", err)
+} else {
+	log.Printf("Product data: %v", getProductInfo)
+}
+```
+
+### Session Management Example
+
+```go
+sessionID, err := client.CreateSession("user_01")
+if err != nil {
+	log.Printf("Failed to create session: %v", err)
+}
+log.Printf("Session created: %v", sessionID)
+```
+
+Refer to the [library source code](https://github.com/tempdb-labs/tempdb-go.git) for further details on all available commands and their usage.

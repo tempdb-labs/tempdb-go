@@ -16,10 +16,19 @@ func main() {
 	}
 	defer client.Close()
 
-	res, err := client.ViewData()
+	user := map[string]interface{}{
+		"name":    "Thembinkosi",
+		"surname": "Mkhonta",
+		"preferences": map[string]interface{}{
+			"mode":          "dark",
+			"notifications": "no",
+		},
+	}
+
+	result, err := client.Store("user_01", user)
 	if err != nil {
 		return
 	}
 
-	log.Println("data: ", res)
+	log.Println("user stored successfully %v", result)
 }

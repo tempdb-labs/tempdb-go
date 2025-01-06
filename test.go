@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ThembinkosiThemba/zen"
 	tempdb "github.com/tempdb-labs/tempdb-go/lib"
 )
 
@@ -49,19 +48,19 @@ func Connect1() {
 
 	file, err := os.Open("data.csv")
 	if err != nil {
-		zen.Fatalf("error opening CSV file: %v", err)
+		log.Fatalf("error opening CSV file: %v", err)
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
 	header, err := reader.Read()
 	if err != nil {
-		zen.Fatalf("error reading CSV header: %v", err)
+		log.Fatalf("error reading CSV header: %v", err)
 	}
 
 	records, err := reader.ReadAll()
 	if err != nil {
-		zen.Fatalf("error reading CSV records: %v", err)
+		log.Fatalf("error reading CSV records: %v", err)
 	}
 
 	for range ticker.C {
