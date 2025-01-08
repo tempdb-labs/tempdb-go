@@ -43,7 +43,7 @@ func Connect1() {
 	}
 	defer client.Close()
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(3* time.Second)
 	defer ticker.Stop()
 
 	file, err := os.Open("data.csv")

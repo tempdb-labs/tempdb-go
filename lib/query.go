@@ -3,114 +3,126 @@ package lib
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
-
-type SortOrder string
-
-const (
-	Ascending  SortOrder = "Ascending"
-	Descending SortOrder = "Descending"
-)
-
-type Operator string
-
-const (
-	Eq         Operator = "Eq"
-	Gt         Operator = "Gt"
-	Lt         Operator = "Lt"
-	Gte        Operator = "Gte"
-	Lte        Operator = "Lte"
-	Contains   Operator = "Contains"
-	StartsWith Operator = "StartsWith"
-	EndsWith   Operator = "EndsWith"
-)
-
-type Condition struct {
-	Field    string      `json:"field"`
-	Operator Operator    `json:"operator"`
-	Value    interface{} `json:"value"`
-}
-
-type Query struct {
-	Conditions []Condition `json:"conditions"`
-	SortBy     *string     `json:"sort_by,omitempty"`
-	SortOrder  *SortOrder  `json:"sort_order,omitempty"`
-	Limit      *int        `json:"limit,omitempty"`
-	Offset     *int        `json:"offset,omitempty"`
-	TimeRange  *struct {
-		Start int64 `json:"start"`
-		End   int64 `json:"end"`
-	} `json:"time_range,omitempty"`
-}
 
 type QueryBuilder struct {
-	query Query
+	operations []string
 }
 
-func NewQueryBuilder() *QueryBuilder {
-	return &QueryBuilder{
-		query: Query{
-			Conditions: make([]Condition, 0),
-		},
-	}
+func NewQuery() *QueryBuilder {
+	return &QueryBuilder{operations: make([]string, 0)}
 }
 
-func (qb *QueryBuilder) WhereEqual(field string, value interface{}) *QueryBuilder {
-	qb.query.Conditions = append(qb.query.Conditions, Condition{
-		Field:    field,
-		Operator: Eq,
-		Value:    value,
-	})
+func (ab *QueryBuilder) Count() *QueryBuilder {
+	ab.operations = append(ab.operations, "COUNT")
+	return ab
+}
+
+func (ab *QueryBuilder) Sum(field string) *QueryBuilder {
+	ab.operations = append(ab.operations, fmt.Sprintf("SUM /%s", field))
+	return ab
+}
+
+func (ab *QueryBuilder) Average(field string) *QueryBuilder {
+	ab.operations = append(ab.operations, fmt.Sprintf("AVG /%s", field))
+	return ab
+}
+
+func (ab *QueryBuilder) GroupBy(field string) *QueryBuilder {
+	ab.operations = append(ab.operations, fmt.Sprintf("GROUPBY /%s", field))
+	return ab
+}
+
+func (ab *QueryBuilder) Filter(field, operator, value string) *QueryBuilder {
+	ab.operations = append(ab.operations, fmt.Sprintf("FILTER /%s %s %s", field, operator, value))
+	return ab
+}
+
+func (qb *QueryBuilder) Min(field string) *QueryBuilder {
+	qb.operations = append(qb.operations, fmt.Sprintf("MIN /%s", field))
 	return qb
 }
 
-func (qb *QueryBuilder) Sort(field string, order SortOrder) *QueryBuilder {
-	qb.query.SortBy = &field
-	qb.query.SortOrder = &order
+func (qb *QueryBuilder) Max(field string) *QueryBuilder {
+	qb.operations = append(qb.operations, fmt.Sprintf("MAX /%s", field))
 	return qb
 }
 
-func (qb *QueryBuilder) Limit(limit int) *QueryBuilder {
-	qb.query.Limit = &limit
+func (qb *QueryBuilder) Distinct(field string) *QueryBuilder {
+	qb.operations = append(qb.operations, fmt.Sprintf("DISTINCT /%s", field))
 	return qb
 }
 
-func (qb *QueryBuilder) Offset(offset int) *QueryBuilder {
-	qb.query.Offset = &offset
+func (qb *QueryBuilder) TopN(n int, field string) *QueryBuilder {
+	qb.operations = append(qb.operations, fmt.Sprintf("TOPN %d /%s", n, field))
 	return qb
 }
 
-func (qb *QueryBuilder) TimeRange(start int64, end int64) *QueryBuilder {
-	qb.query.TimeRange = &struct {
-		Start int64 `json:"start"`
-		End   int64 `json:"end"`
-	}{Start: start, End: end}
+func (qb *QueryBuilder) BottomN(n int, field string) *QueryBuilder {
+	qb.operations = append(qb.operations, fmt.Sprintf("BOTTOMN %d /%s", n, field))
 	return qb
 }
 
-func (qb *QueryBuilder) Build() Query {
-	return qb.query
+// Enhanced filter operations
+func (qb *QueryBuilder) FilterEquals(field, value string) *QueryBuilder {
+	return qb.Filter(field, "eq", value)
 }
 
-func (c *TempDBClient) Query(query Query) (interface{}, error) {
-	queryJSON, err := json.Marshal(query)
-	if err != nil {
-		return "", err
-	}
-	return c.sendCommand(fmt.Sprintf("QUERY %s", (string(queryJSON))))
+func (qb *QueryBuilder) FilterNotEquals(field, value string) *QueryBuilder {
+	return qb.Filter(field, "neq", value)
 }
 
-func (c *TempDBClient) QueryPipeline(pipeline string) (interface{}, error) {
-	return c.sendCommand(fmt.Sprintf("PIPELINE %s", pipeline))
+func (qb *QueryBuilder) FilterGreaterThan(field, value string) *QueryBuilder {
+	return qb.Filter(field, "gt", value)
 }
 
-// Convience method for common query patterns
-func (c *TempDBClient) QueryWhere(field, value string) (interface{}, error) {
-	pipeline := fmt.Sprintf("where %s eq %s", field, value)
-	return c.QueryPipeline(pipeline)
+func (qb *QueryBuilder) FilterLessThan(field, value string) *QueryBuilder {
+	return qb.Filter(field, "lt", value)
 }
 
-// for building complex pipelines
-func (c *TempDBClient) QueryBuilder() *QueryBuilder {
-	return NewQueryBuilder()
+func (qb *QueryBuilder) FilterStartsWith(field, value string) *QueryBuilder {
+	return qb.Filter(field, "startswith", value)
+}
+
+func (qb *QueryBuilder) FilterEndsWith(field, value string) *QueryBuilder {
+	return qb.Filter(field, "endswith", value)
+}
+
+func (qb *QueryBuilder) FilterContains(field, value string) *QueryBuilder {
+	return qb.Filter(field, "contains", value)
+}
+
+func (qb *QueryBuilder) FilterIn(field string, values []string) *QueryBuilder {
+	jsonArray, _ := json.Marshal(values)
+	return qb.Filter(field, "in", string(jsonArray))
+}
+
+func (qb *QueryBuilder) FilterNotIn(field string, values []string) *QueryBuilder {
+	jsonArray, _ := json.Marshal(values)
+	return qb.Filter(field, "notin", string(jsonArray))
+}
+
+func (qb *QueryBuilder) FilterExists(field string) *QueryBuilder {
+	return qb.Filter(field, "exists", "true")
+}
+
+func (qb *QueryBuilder) FilterNotExists(field string) *QueryBuilder {
+	return qb.Filter(field, "notexists", "true")
+}
+
+func (qb *QueryBuilder) FilterRegex(field, pattern string) *QueryBuilder {
+	return qb.Filter(field, "regex", pattern)
+}
+
+func (ab *QueryBuilder) Build() string {
+	return strings.Join(ab.operations, " ")
+}
+
+func (c *TempDBClient) Query(pipeline string) (interface{}, error) {
+	return c.sendCommand(fmt.Sprintf("QUERY %s", pipeline))
+}
+
+func (c *TempDBClient) QueryWithBuilder(builder *QueryBuilder) (interface{}, error) {
+	return c.Query(builder.Build())
 }
