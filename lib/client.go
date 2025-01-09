@@ -150,6 +150,18 @@ func (c *TempDBClient) Set(key, value string) error {
 	return err
 }
 
+func (c *TempDBClient) ViewData() (interface{}, error) {
+	return c.sendCommand("VIEW_DATA")
+}
+
+func (c *TempDBClient) ViewLogs() (interface{}, error) {
+	return c.sendCommand("VIEW_LOGS")
+}
+
+func (c *TempDBClient) ViewSystemLogs() (interface{}, error) {
+	return c.sendCommand("VIEW_SYSTEM_LOGS")
+}
+
 func (c *TempDBClient) GetByKey(key string) (string, error) {
 	result, err := c.sendCommand(fmt.Sprintf("GET_KEY %s", key))
 	if err != nil {
@@ -199,10 +211,6 @@ func (c *TempDBClient) StoreBatch(entries map[string]interface{}) (interface{}, 
 
 func (c *TempDBClient) GetFieldByKey(key, field string) (interface{}, error) {
 	return c.sendCommand(fmt.Sprintf("GET_FIELD %s /%s", key, field))
-}
-
-func (c *TempDBClient) ViewData() (interface{}, error) {
-	return c.sendCommand("VIEW_DATA")
 }
 
 // Command: SESSION_CREATE

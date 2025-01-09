@@ -97,4 +97,14 @@ func Routes(r *zen.Engine, client *tempdb.TempDBClient) {
 
 		ctx.Success(http.StatusOK, result, "OK")
 	})
+
+	r.GET("/logs", func(ctx *zen.Context) {
+		result, err := client.ViewLogs()
+		if err != nil {
+			ctx.Error(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		ctx.Success(http.StatusOK, result, "OK")
+	})
 }
