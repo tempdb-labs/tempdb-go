@@ -13,7 +13,7 @@ func main() {
 
 	client, err := tempdb.NewClient(tempdb.Config{
 		Addr: "0.0.0.0:8081",
-		URL:  "tempdb://admin:admin@workspace:8020/ecommerce",
+		URL:  "tempdb://admin:admin@workspace:8020/ecommerce-docs",
 	})
 	if err != nil {
 		log.Fatalf("Failed to get client: %v", err)
@@ -22,9 +22,21 @@ func main() {
 
 	app.Apply(zen.Logger())
 	Routes(app, client)
+	DocumentGroup(app, client)
 
 	app.Serve(":8082")
 
+}
+
+func DocumentGroup(r *zen.Engine, client *tempdb.TempDBClient) {
+	r.GET("/d/all", func(ctx *zen.Context) {
+		res, err := client.GetAllDocs()
+		if err != nil {
+			ctx.Error(http.StatusInternalServerError, err.Error())
+			return
+		}
+		ctx.Success(http.StatusOK, res, "OK")
+	})
 }
 
 func Routes(r *zen.Engine, client *tempdb.TempDBClient) {
@@ -84,27 +96,5 @@ func Routes(r *zen.Engine, client *tempdb.TempDBClient) {
 		}
 
 		ctx.Success(http.StatusOK, result5, "OK")
-	})
-
-	r.GET("/count", func(ctx *zen.Context) {
-		// countPipe := tempdb.NewQuery().Count()
-		// result, err := client.QueryWithBuilder(countPipe)
-		result, err := client.Query("COUNT")
-		if err != nil {
-			ctx.Error(http.StatusInternalServerError, err.Error())
-			return
-		}
-
-		ctx.Success(http.StatusOK, result, "OK")
-	})
-
-	r.GET("/logs", func(ctx *zen.Context) {
-		result, err := client.ViewLogs()
-		if err != nil {
-			ctx.Error(http.StatusInternalServerError, err.Error())
-			return
-		}
-
-		ctx.Success(http.StatusOK, result, "OK")
 	})
 }

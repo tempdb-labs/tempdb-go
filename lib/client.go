@@ -201,6 +201,122 @@ func (c *TempDBClient) Store(key string, value interface{}) (interface{}, error)
 	return c.sendCommand(fmt.Sprintf("STORE %s %s", key, string(jsonValue)))
 }
 
+// InsertDoc inserts a new document into the collection
+func (c *TempDBClient) InsertDoc(document interface{}) (string, error) {
+	jsonValue, err := json.Marshal(document)
+	if err != nil {
+		return "", err
+	}
+	result, err := c.sendCommand(fmt.Sprintf("INSERT_DOC %s", string(jsonValue)))
+	if err != nil {
+		return "", err
+	}
+	// Result will be the document ID
+	return fmt.Sprint(result), nil
+}
+
+// GetDoc retrieves a document by its ID
+func (c *TempDBClient) GetDoc(docID string) (map[string]interface{}, error) {
+	result, err := c.sendCommand(fmt.Sprintf("GET_DOC %s", docID))
+	if err != nil {
+		return nil, err
+	}
+
+	doc, ok := result.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected response format")
+	}
+	return doc, nil
+}
+
+// GetAllDocs retrieves all documents in the collection
+func (c *TempDBClient) GetAllDocs() ([]map[string]interface{}, error) {
+	result, err := c.sendCommand("GET_ALL_DOCS")
+	if err != nil {
+		return nil, err
+	}
+
+	response, ok := result.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected response format")
+	}
+
+	docs, ok := response["documents"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected documents format")
+	}
+
+	documents := make([]map[string]interface{}, len(docs))
+	for i, doc := range docs {
+		docMap, ok := doc.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid document format")
+		}
+		documents[i] = docMap
+	}
+
+	return documents, nil
+}
+
+// UpdateDoc updates a document by its ID
+func (c *TempDBClient) UpdateDoc(docID string, update interface{}) (map[string]interface{}, error) {
+	jsonValue, err := json.Marshal(update)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := c.sendCommand(fmt.Sprintf("UPDATE_DOC %s %s", docID, string(jsonValue)))
+	if err != nil {
+		return nil, err
+	}
+
+	doc, ok := result.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected response format")
+	}
+	return doc, nil
+}
+
+// DeleteDoc deletes a document by its ID
+func (c *TempDBClient) DeleteDoc(docID string) error {
+	_, err := c.sendCommand(fmt.Sprintf("DELETE_DOC %s", docID))
+	return err
+}
+
+// QueryDocs queries documents using a filter
+func (c *TempDBClient) QueryDocs(filter interface{}) ([]map[string]interface{}, error) {
+	jsonValue, err := json.Marshal(filter)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := c.sendCommand(fmt.Sprintf("QUERY_DOCS %s", string(jsonValue)))
+	if err != nil {
+		return nil, err
+	}
+
+	response, ok := result.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected response format")
+	}
+
+	docs, ok := response["documents"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected documents format")
+	}
+
+	documents := make([]map[string]interface{}, len(docs))
+	for i, doc := range docs {
+		docMap, ok := doc.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid document format")
+		}
+		documents[i] = docMap
+	}
+
+	return documents, nil
+}
+
 func (c *TempDBClient) StoreBatch(entries map[string]interface{}) (interface{}, error) {
 	jsonValue, err := json.Marshal(entries)
 	if err != nil {

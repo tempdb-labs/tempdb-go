@@ -1,20 +1,20 @@
 package main
 
-import (
-	"log"
+// import (
+// 	"log"
 
-	tempdb "github.com/tempdb-labs/tempdb-go/lib"
-)
+// 	tempdb "github.com/tempdb-labs/tempdb-go/lib"
+// )
 
-func main() {
-	client, err := tempdb.NewClient(tempdb.Config{
-		Addr: "0.0.0.0:8081",
-		URL:  "tempdb://admin:admin@workspace:8020/ecommerce",
-	})
-	if err != nil {
-		log.Fatalf("Failed to get client: %v", err)
-	}
-	defer client.Close()
+// func main() {
+// 	client, err := tempdb.NewClient(tempdb.Config{
+// 		Addr: "0.0.0.0:8081",
+// 		URL:  "tempdb://admin:admin@workspace:8020/ecommerce",
+// 	})
+// 	if err != nil {
+// 		log.Fatalf("Failed to get client: %v", err)
+// 	}
+// 	defer client.Close()
 
 	// Example 1: Using raw command string
 	// Get total sales by payment method
@@ -53,13 +53,13 @@ func main() {
 
 	// Example 4: Customer behaviour analysis
 	// get the average purchase amount by paymenet method and gender
-	behaviourPipe := tempdb.NewQuery().GroupBy("payment_method").GroupBy("gender").Average("net_amount")
-	result4, err := client.QueryWithBuilder(behaviourPipe)
-	if err != nil {
-		log.Fatalf("error: %v", result4)
-	}
+	// behaviourPipe := tempdb.NewQuery().GroupBy("payment_method").GroupBy("gender").Average("net_amount")
+	// result4, err := client.QueryWithBuilder(behaviourPipe)
+	// if err != nil {
+	// 	log.Fatalf("error: %v", result4)
+	// }
 
-	log.Println(behaviourPipe)
+	// log.Println(behaviourPipe)
 
 	// // Exampe 5: time based analysis
 	// timePipe := tempdb.NewAggregation().Filter("net_amount", "gt", "1000").GroupBy("age_group").Count()
@@ -67,4 +67,4 @@ func main() {
 	// if err != nil {
 	// 	log.Fatalf("error: %f", result5)
 	// }
-}
+// }
