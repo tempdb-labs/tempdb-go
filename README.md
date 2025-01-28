@@ -66,11 +66,12 @@ func main() {
   - `SAdd`: Add a value to a set.
   - `GetFieldByKey`: Retrieve specific fields within a key.
   - `ViewData`: View all data in the database.
+  - `Get`: Retrieves a particular key from the database.
 
 ### Example for Data Retrieval
 
 ```go
-getProductInfo, err := client.GetByKey("user_01")
+getProductInfo, err := client.Get("user_01")
 if err != nil {
 	log.Printf("Failed to get product: %v", err)
 } else {
@@ -88,4 +89,4 @@ if err != nil {
 log.Printf("Session created: %v", sessionID)
 ```
 
-Refer to the [library source code](https://github.com/tempdb-labs/tempdb-go.git) for further details on all available commands and their usage.
+Refer to the [library full documentation](https://docs.tempdb.xyz) for further details on all available commands and their usage.

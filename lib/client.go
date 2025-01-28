@@ -162,8 +162,8 @@ func (c *TempDBClient) ViewSystemLogs() (interface{}, error) {
 	return c.sendCommand("VIEW_SYSTEM_LOGS")
 }
 
-func (c *TempDBClient) GetByKey(key string) (string, error) {
-	result, err := c.sendCommand(fmt.Sprintf("GET_KEY %s", key))
+func (c *TempDBClient) Get(key string) (string, error) {
+	result, err := c.sendCommand(fmt.Sprintf("GET %s", key))
 	if err != nil {
 		return "", err
 	}
