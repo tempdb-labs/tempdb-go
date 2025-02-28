@@ -12,20 +12,30 @@ import (
 )
 
 func main() {
-	Connect1()
+	// Connect1()
 
-	// entries := map[string]interface{}{
-	// 	"key1": map[string]interface{}{
-	// 		"name": "John Doe",
-	// 		"year": "2025",
-	// 	},
-	// 	"key2": map[string]interface{}{
-	// 		"name": "Jane Doe",
-	// 		"year": "2024",
-	// 	},
+	client, err := tempdb.NewClient(tempdb.Config{
+		Addr: "0.0.0.0:8081",
+		URL:  "tempdb://admin:123456789@workspace:cb4552273c5c/ecommerce",
+	})
+	if err != nil {
+		log.Fatalf("failed to connect to client: %v", err)
+	}
+	defer client.Close()
+
+	res, err := client.Get("one")
+	if err != nil {
+		log.Println(err)
+	}
+
+	log.Println("one: ", res)
+
+	// entry := map[string]interface{}{
+	// 	"name": "John Doe",
+	// 	"year": "2025",
 	// }
 
-	// response, err := client.StoreBatch(entries)
+	// response, err := client.Store("one", entry)
 	// if err != nil {
 	// 	log.Printf("error storing batch: %v", err)
 	// }
@@ -36,14 +46,14 @@ func main() {
 func Connect1() {
 	client, err := tempdb.NewClient(tempdb.Config{
 		Addr: "0.0.0.0:8081",
-		URL:  "tempdb://admin:admin@workspace:8020/ecommerce",
+		URL:  "tempdb://admin:123456789@workspace:cb4552273c5c/ecommerce",
 	})
 	if err != nil {
 		log.Fatalf("failed to connect to client: %v", err)
 	}
 	defer client.Close()
 
-	ticker := time.NewTicker(3* time.Second)
+	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
 	file, err := os.Open("data.csv")

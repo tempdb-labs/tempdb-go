@@ -10,14 +10,17 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 // Config holds the configuration for connecting to TempDB.
 type Config struct {
-	Addr string // Addr is the address of the TempDB server.
-	URL  string // URL is the URL of the collection.
+	Addr   string // Addr is the address of the TempDB server.
+	URL    string // URL is the URL of the collection.
+	UseTLS bool
 }
 
 // TempDBClient represents a client connection to TempDB.
@@ -26,6 +29,7 @@ type TempDBClient struct {
 	addr      string     // addr is the address of the TempDB server.
 	urlString string     // urlString contains the full URL of the collection.
 	mu        sync.Mutex // mu is a mutex to ensure thread-safe operations.
+	sessionId string     // sessionId stores the authentication session ID
 }
 
 // clientPool manages a pool of TempDBClient connections.
@@ -61,7 +65,14 @@ func createClient(config Config) (*TempDBClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connection error: %w", err)
 	}
-	return &TempDBClient{conn: conn, addr: config.Addr, urlString: config.URL}, nil
+	client := &TempDBClient{conn: conn, addr: config.Addr, urlString: config.URL}
+
+	if err := client.authenticate(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("authentication error: %w", err)
+	}
+
+	return client, nil
 }
 
 func (c *TempDBClient) Close() {
@@ -77,31 +88,26 @@ func (c *TempDBClient) Ping() (interface{}, error) {
 	return pong, err
 }
 
-func Client(addr, url string) (*TempDBClient, error) {
-	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("connection error: %w", err)
-	}
-
-	client := &TempDBClient{conn: conn, addr: addr, urlString: url}
-
-	return client, nil
-}
-
 func (c *TempDBClient) sendCommand(command string) (interface{}, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	fullCommand := fmt.Sprintf("%s %s", c.urlString, command)
-	_, err := fmt.Fprintf(c.conn, "%s", fullCommand+"\r\n")
+	_, err := fmt.Fprintf(c.conn, "%s\r\n", fullCommand)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("failed to send command: %w", err)
 	}
 
 	reader := bufio.NewReader(c.conn)
 	respBytes, err := reader.ReadBytes('\n')
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Handle MSG prefix for Pub/Sub messages
+	respStr := strings.TrimSpace(string(respBytes))
+	if strings.HasPrefix(respStr, "MSG ") {
+		return strings.TrimPrefix(respStr, "MSG "), nil
 	}
 
 	var response Response
@@ -145,6 +151,34 @@ func (c *TempDBClient) sendCommand(command string) (interface{}, error) {
 	return result, nil
 }
 
+func (c *TempDBClient) authenticate() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	_, err := fmt.Fprintf(c.conn, "%s\n", c.urlString)
+	if err != nil {
+		return fmt.Errorf("failed to send connection stirng : %w", err)
+	}
+
+	reader := bufio.NewReader(c.conn)
+	respBytes, err := reader.ReadBytes('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read auth response: %w", err)
+	}
+
+	respStr := string(respBytes)
+	log.Println("Auth response:", respStr)
+
+	// Parse the authentication response
+	if !strings.HasPrefix(respStr, "AUTH OK ") {
+		return fmt.Errorf("authentication failed: %s", respStr)
+	}
+
+	c.sessionId = strings.TrimPrefix(strings.TrimSpace(respStr), "AUTH OK ")
+
+	return nil
+}
+
 func (c *TempDBClient) Set(key, value string) error {
 	_, err := c.sendCommand(fmt.Sprintf("SET %s %s", key, value))
 	return err
@@ -163,7 +197,7 @@ func (c *TempDBClient) ViewSystemLogs() (interface{}, error) {
 }
 
 func (c *TempDBClient) Get(key string) (string, error) {
-	result, err := c.sendCommand(fmt.Sprintf("GET %s", key))
+	result, err := c.sendCommand(fmt.Sprintf("GET_KEY %s", key))
 	if err != nil {
 		return "", err
 	}
@@ -181,7 +215,7 @@ func (c *TempDBClient) SetEx(key string, seconds int, value string) (interface{}
 }
 
 func (c *TempDBClient) Delete(key string) (interface{}, error) {
-	return c.sendCommand(fmt.Sprintf("DELETE %s", key))
+	return c.sendCommand(fmt.Sprintf("DELETE_KEY %s", key))
 }
 
 func (c *TempDBClient) LPush(key, value string) (interface{}, error) {
@@ -351,4 +385,270 @@ func (c *TempDBClient) SetSession(sessionID, key, value string) (interface{}, er
 func (c *TempDBClient) DeleteSession(sessionID string) (interface{}, error) {
 	command := fmt.Sprintf("SESSION_DELETE %s", sessionID)
 	return c.sendCommand(command)
+}
+
+// Subscribe subscribes to a Pub/Sub channel and calls the handler for each message
+func (c *TempDBClient) Subscribe(channel string, handler func(message string)) error {
+	_, err := c.sendCommand(fmt.Sprintf("SUBSCRIBE %s", channel))
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		reader := bufio.NewReader(c.conn)
+		for {
+			msgBytes, err := reader.ReadBytes('\n')
+			if err != nil {
+				log.Printf("Error reading subscription message: %v", err)
+				return
+			}
+			msg := strings.TrimSpace(string(msgBytes))
+			if strings.HasPrefix(msg, "MSG ") {
+				handler(strings.TrimPrefix(msg, "MSG "))
+			}
+		}
+	}()
+	return nil
+}
+
+// Unsubscribe unsubscribes from a Pub/Sub channel
+func (c *TempDBClient) Unsubscribe(channel string) error {
+	_, err := c.sendCommand(fmt.Sprintf("UNSUBSCRIBE %s", channel))
+	return err
+}
+
+// Publish publishes a message to a Pub/Sub channel
+func (c *TempDBClient) Publish(channel, message string) (int, error) {
+	result, err := c.sendCommand(fmt.Sprintf("PUBLISH %s %s", channel, message))
+	if err != nil {
+		return 0, err
+	}
+	if countStr, ok := result.(string); ok {
+		if strings.HasPrefix(countStr, "SENT_TO_") {
+			count, _ := strconv.Atoi(strings.TrimPrefix(countStr, "SENT_TO_"))
+			return count, nil
+		}
+	}
+	return 0, fmt.Errorf("unexpected response: %v", result)
+}
+
+// XAdd adds an entry to an event stream
+func (c *TempDBClient) XAdd(streamKey string, data interface{}) (string, error) {
+	jsonValue, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	result, err := c.sendCommand(fmt.Sprintf("XADD %s %s", streamKey, string(jsonValue)))
+	if err != nil {
+		return "", err
+	}
+	if id, ok := result.(string); ok {
+		return id, nil
+	}
+	return "", fmt.Errorf("unexpected response: %v", result)
+}
+
+// XRead reads entries from an event stream
+func (c *TempDBClient) XRead(streamKey, startID string, count int) ([]map[string]interface{}, error) {
+	result, err := c.sendCommand(fmt.Sprintf("XREAD %s %s %d", streamKey, startID, count))
+	if err != nil {
+		return nil, err
+	}
+	entries, ok := result.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected response format")
+	}
+	resultEntries := make([]map[string]interface{}, len(entries))
+	for i, entry := range entries {
+		if e, ok := entry.(map[string]interface{}); ok {
+			resultEntries[i] = e
+		} else {
+			return nil, fmt.Errorf("invalid entry format")
+		}
+	}
+	return resultEntries, nil
+}
+
+// Enqueue adds a message to a queue
+func (c *TempDBClient) Enqueue(queueKey string, message interface{}) error {
+	jsonValue, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	_, err = c.sendCommand(fmt.Sprintf("ENQUEUE %s %s", queueKey, string(jsonValue)))
+	return err
+}
+
+// Dequeue removes and returns a message from a queue
+func (c *TempDBClient) Dequeue(queueKey string) (interface{}, error) {
+	return c.sendCommand(fmt.Sprintf("DEQUEUE %s", queueKey))
+}
+
+// PubSubChannels retrieves all active Pub/Sub channels in the database.
+// Usage Guide:
+//   - Purpose: Lists all Pub/Sub channels currently active in the database.
+//   - Command: PUBSUB CHANNELS
+//   - Input: None (uses the client's current database context).
+//   - Output: A slice of strings representing channel names.
+//   - Example:
+//     client, err := NewClient(Config{Addr: "localhost:8080", URL: "tempdb://default"})
+//     if err != nil { log.Fatal(err) }
+//     defer client.Close()
+//     channels, err := client.PubSubChannels()
+//     if err != nil { log.Fatal(err) }
+//     fmt.Println("Active channels:", channels) // e.g., ["chat", "notifications"]
+//   - Error Cases:
+//   - Returns an error if the connection fails or the server responds with an error.
+func (c *TempDBClient) PubSubChannels() (interface{}, error) {
+	result, err := c.sendCommand("CHANS")
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// XList retrieves all event streams in the database.
+// Usage Guide:
+//   - Purpose: Lists all event stream keys in the database.
+//   - Command: XLIST
+//   - Input: None (uses the client's current database context).
+//   - Output: A slice of strings representing stream keys.
+//   - Example:
+//     client, err := NewClient(Config{Addr: "localhost:8080", URL: "tempdb://default"})
+//     if err != nil { log.Fatal(err) }
+//     defer client.Close()
+//     streams, err := client.XList()
+//     if err != nil { log.Fatal(err) }
+//     fmt.Println("Active streams:", streams) // e.g., ["user-events", "system-logs"]
+//   - Error Cases:
+//   - Returns an error if the connection fails, the server responds with an error, or the response format is invalid.
+func (c *TempDBClient) XList() (interface{}, error) {
+	result, err := c.sendCommand("XLIST")
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// QList retrieves all message queues in the database.
+// Usage Guide:
+//   - Purpose: Lists all message queue keys in the database.
+//   - Command: QLIST
+//   - Input: None (uses the client's current database context).
+//   - Output: A slice of strings representing queue keys.
+//   - Example:
+//     client, err := NewClient(Config{Addr: "localhost:8080", URL: "tempdb://default"})
+//     if err != nil { log.Fatal(err) }
+//     defer client.Close()
+//     queues, err := client.QList()
+//     if err != nil { log.Fatal(err) }
+//     fmt.Println("Active queues:", queues) // e.g., ["tasks", "jobs"]
+//   - Error Cases:
+//   - Returns an error if the connection fails, the server responds with an error, or the response format is invalid.
+func (c *TempDBClient) QList() (interface{}, error) {
+	result, err := c.sendCommand("QLIST")
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// PubSubNumSub retrieves the number of subscribers for a specific Pub/Sub channel.
+// Usage Guide:
+//   - Purpose: Returns the count of active subscribers for a given channel.
+//   - Command: PUBSUB NUMSUB <channel>
+//   - Input: channel (string) - The name of the channel to check.
+//   - Output: An integer representing the number of subscribers.
+//   - Example:
+//     client, err := NewClient(Config{Addr: "localhost:8080", URL: "tempdb://default"})
+//     if err != nil { log.Fatal(err) }
+//     defer client.Close()
+//     count, err := client.PubSubNumSub("chat")
+//     if err != nil { log.Fatal(err) }
+//     fmt.Println("Subscribers to 'chat':", count) // e.g., 3
+//   - Error Cases:
+//   - Returns an error if the connection fails, the server responds with an error, or the response isn’t a valid integer.
+func (c *TempDBClient) PubSubNumSub(channel string) (interface{}, error) {
+	result, err := c.sendCommand(fmt.Sprintf("CHANS_SUBS %s", channel))
+	if err != nil {
+		return 0, err
+	}
+
+	return result, nil
+}
+
+// XDel deletes an event stream from the database.
+// Usage Guide:
+//   - Purpose: Removes an entire event stream and all its events from the database.
+//   - Command: XDEL <stream_key>
+//   - Input: streamKey (string) - The key of the stream to delete.
+//   - Output: None (returns nil on success).
+//   - Example:
+//     client, err := NewClient(Config{Addr: "localhost:8080", URL: "tempdb://default"})
+//     if err != nil { log.Fatal(err) }
+//     defer client.Close()
+//     err = client.XDel("user-events")
+//     if err != nil { log.Fatal(err) }
+//     fmt.Println("Stream 'user-events' deleted")
+//   - Error Cases:
+//   - Returns an error if the connection fails, the stream doesn’t exist (server returns "NOT_FOUND"), or the server responds with an error.
+func (c *TempDBClient) XDel(streamKey string) error {
+	result, err := c.sendCommand(fmt.Sprintf("XDEL %s", streamKey))
+	if err != nil {
+		return err
+	}
+	if resultStr, ok := result.(string); ok && resultStr == "DELETED" {
+		return nil
+	}
+	return fmt.Errorf("unexpected response: %v", result)
+}
+
+// QPeek retrieves the next message in a queue without removing it.
+// Usage Guide:
+//   - Purpose: Allows inspection of the next message in a queue without dequeuing it.
+//   - Command: QPEEK <queue_key>
+//   - Input: queueKey (string) - The key of the queue to peek into.
+//   - Output: An interface{} containing the next message (typically a map[string]interface{} for JSON data).
+//   - Example:
+//     client, err := NewClient(Config{Addr: "localhost:8080", URL: "tempdb://default"})
+//     if err != nil { log.Fatal(err) }
+//     defer client.Close()
+//     msg, err := client.QPeek("tasks")
+//     if err != nil { log.Fatal(err) }
+//     fmt.Println("Next message:", msg) // e.g., map[task:"process" id:1]
+//   - Error Cases:
+//   - Returns an error if the connection fails, the queue is empty (server returns "EMPTY"), or the server responds with an error.
+func (c *TempDBClient) QPeek(queueKey string) (interface{}, error) {
+	result, err := c.sendCommand(fmt.Sprintf("QPEEK %s", queueKey))
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// QLen retrieves the current length of a message queue.
+// Usage Guide:
+//   - Purpose: Returns the number of messages currently in a queue.
+//   - Command: QLEN <queue_key>
+//   - Input: queueKey (string) - The key of the queue to check.
+//   - Output: An integer representing the number of messages in the queue.
+//   - Example:
+//     client, err := NewClient(Config{Addr: "localhost:8080", URL: "tempdb://default"})
+//     if err != nil { log.Fatal(err) }
+//     defer client.Close()
+//     length, err := client.QLen("tasks")
+//     if err != nil { log.Fatal(err) }
+//     fmt.Println("Queue length:", length) // e.g., 5
+//   - Error Cases:
+//   - Returns an error if the connection fails, the server responds with an error, or the response isn’t a valid integer.
+func (c *TempDBClient) QLen(queueKey string) (interface{}, error) {
+	result, err := c.sendCommand(fmt.Sprintf("QLEN %s", queueKey))
+	if err != nil {
+		return 0, err
+	}
+
+	return result, nil
 }

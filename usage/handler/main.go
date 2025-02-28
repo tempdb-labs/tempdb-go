@@ -11,17 +11,21 @@ import (
 func main() {
 	app := zen.New()
 
-	client, err := tempdb.NewClient(tempdb.Config{
+	config := tempdb.Config{
 		Addr: "0.0.0.0:8081",
-		URL:  "tempdb://admin:admin@workspace:8020/ecommerce-docs",
-	})
+		URL:  "tempdb://admin:123456789@workspace:cb4552273c5c/ecommerce",
+	}
+
+	client, err := tempdb.NewClient(config)
+	if err != nil {
+		log.Fatalf("Failed to connect: %v", err)
+	}
 	if err != nil {
 		log.Fatalf("Failed to get client: %v", err)
 	}
 	defer client.Close()
 
 	app.Apply(zen.Logger())
-	Routes(app, client)
 	DocumentGroup(app, client)
 
 	app.Serve(":8082")
@@ -29,72 +33,39 @@ func main() {
 }
 
 func DocumentGroup(r *zen.Engine, client *tempdb.TempDBClient) {
-	r.GET("/d/all", func(ctx *zen.Context) {
-		res, err := client.GetAllDocs()
+	r.GET("/c/1", func(ctx *zen.Context) {
+		res, err := client.PubSubChannels()
 		if err != nil {
 			ctx.Error(http.StatusInternalServerError, err.Error())
 			return
 		}
 		ctx.Success(http.StatusOK, res, "OK")
 	})
-}
 
-func Routes(r *zen.Engine, client *tempdb.TempDBClient) {
-	r.GET("/", func(ctx *zen.Context) {
-		res, err := client.Query("GROUPBY /payment_method SUM /net_amount")
+	r.GET("/c/2", func(ctx *zen.Context) {
+		res, err := client.XList()
 		if err != nil {
 			ctx.Error(http.StatusInternalServerError, err.Error())
 			return
 		}
-
 		ctx.Success(http.StatusOK, res, "OK")
 	})
 
-	r.GET("/1", func(ctx *zen.Context) {
-		// Example 2: usign query builder
-		// Get average purchase amount by age group for female customers
-		pipeline := tempdb.NewQuery().Filter("gender", "eq", "Female").GroupBy("age_group").Average("net_amount")
-
-		result2, err := client.QueryWithBuilder(pipeline)
+	r.GET("/c/3", func(ctx *zen.Context) {
+		res, err := client.QPeek("myqueue")
 		if err != nil {
 			ctx.Error(http.StatusInternalServerError, err.Error())
 			return
 		}
-
-		ctx.Success(http.StatusOK, result2, "OK")
+		ctx.Success(http.StatusOK, res, "OK")
 	})
 
-	r.GET("/2", func(ctx *zen.Context) {
-		// // Example 3: Complex analysis
-		// // Get count and toal sales by location where discount was used
-		pipeline2 := tempdb.NewQuery().Filter("discount_availed", "eq", "Yes").GroupBy("location").Count().Sum("new_amount")
-		result3, err := client.QueryWithBuilder(pipeline2)
+	r.GET("/c/4", func(ctx *zen.Context) {
+		res, err := client.QList()
 		if err != nil {
-			zen.Fatalf("error: %v", err)
+			ctx.Error(http.StatusInternalServerError, err.Error())
+			return
 		}
-		ctx.Success(http.StatusOK, result3, "OK")
-	})
-
-	r.GET("/3", func(ctx *zen.Context) {
-		// Example 4: Customer behaviour analysis
-		// get the average purchase amount by paymenet method and gender
-		behaviourPipe := tempdb.NewQuery().GroupBy("payment_method").GroupBy("gender").Average("net_amount")
-		result4, err := client.QueryWithBuilder(behaviourPipe)
-		if err != nil {
-			log.Fatalf("error: %v", result4)
-		}
-
-		ctx.Success(http.StatusOK, result4, "OK")
-	})
-
-	r.GET("/4", func(ctx *zen.Context) {
-		// Exampe 5: time based analysis
-		timePipe := tempdb.NewQuery().Filter("net_amount", "gt", "1000").GroupBy("age_group").Count()
-		result5, err := client.QueryWithBuilder(timePipe)
-		if err != nil {
-			log.Fatalf("error: %f", result5)
-		}
-
-		ctx.Success(http.StatusOK, result5, "OK")
+		ctx.Success(http.StatusOK, res, "OK")
 	})
 }
