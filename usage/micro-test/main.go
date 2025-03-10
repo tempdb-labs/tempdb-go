@@ -11,7 +11,7 @@ import (
 func main() {
 	config := lib.Config{
 		Addr: "0.0.0.0:8081",
-		URL:  "tempdb://admin:123456789@workspace:cb4552273c5c/ecommerce",
+		URL:  "<your-url>",
 	}
 
 	// Run each service in a goroutine
