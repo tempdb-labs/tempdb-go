@@ -8,7 +8,7 @@ import (
 	"github.com/tempdb-labs/tempdb-go/lib"
 )
 
-func main() {
+func main2() {
 	// Initialize the client configuration
 	config := lib.Config{
 		Addr: "0.0.0.0:8081",

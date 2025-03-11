@@ -126,3 +126,47 @@ func (c *TempDBClient) Query(pipeline string) (interface{}, error) {
 func (c *TempDBClient) QueryWithBuilder(builder *QueryBuilder) (interface{}, error) {
 	return c.Query(builder.Build())
 }
+
+// Median calculates the median value of a numeric field
+func (qb *QueryBuilder) Median(field string) *QueryBuilder {
+	qb.operations = append(qb.operations, fmt.Sprintf("MEDIAN /%s", field))
+	return qb
+}
+
+// StdDev calculates the standard deviation of a numeric field
+func (qb *QueryBuilder) StdDev(field string) *QueryBuilder {
+	qb.operations = append(qb.operations, fmt.Sprintf("STDDEV /%s", field))
+	return qb
+}
+
+// Sort orders the data by a field in ascending or descending direction
+func (qb *QueryBuilder) Sort(field, direction string) *QueryBuilder {
+	direction = strings.ToLower(direction)
+	if direction != "asc" && direction != "desc" {
+		direction = "asc" // Default to ascending if invalid
+	}
+	qb.operations = append(qb.operations, fmt.Sprintf("SORT /%s %s", field, direction))
+	return qb
+}
+
+// Join combines data from another key with matching fields
+func (qb *QueryBuilder) Join(sourceKey, sourceField, targetField string) *QueryBuilder {
+	qb.operations = append(qb.operations, fmt.Sprintf("JOIN %s /%s /%s", sourceKey, sourceField, targetField))
+	return qb
+}
+
+// FilterBetween filters values within an inclusive range
+func (qb *QueryBuilder) FilterBetween(field string, low, high string) *QueryBuilder {
+	rangeJSON, _ := json.Marshal([]string{low, high})
+	return qb.Filter(field, "between", string(rangeJSON))
+}
+
+// FilterLike filters strings matching a wildcard pattern (e.g., "%son" for ends with "son")
+func (qb *QueryBuilder) FilterLike(field, pattern string) *QueryBuilder {
+	return qb.Filter(field, "like", pattern)
+}
+
+// FilterIsNull checks if a field is null
+func (qb *QueryBuilder) FilterIsNull(field string) *QueryBuilder {
+	return qb.Filter(field, "isnull", "true")
+}

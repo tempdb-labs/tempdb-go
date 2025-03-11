@@ -1,28 +1,29 @@
 package main
 
-// import (
-// 	"log"
+import (
+	"fmt"
+	"log"
 
-// 	tempdb "github.com/tempdb-labs/tempdb-go/lib"
-// )
+	tempdb "github.com/tempdb-labs/tempdb-go/lib"
+)
 
-// func main() {
-// 	client, err := tempdb.NewClient(tempdb.Config{
-// 		Addr: "0.0.0.0:8081",
-// 		URL:  "tempdb://admin:admin@workspace:8020/ecommerce",
-// 	})
-// 	if err != nil {
-// 		log.Fatalf("Failed to get client: %v", err)
-// 	}
-// 	defer client.Close()
+func main() {
+	client, err := tempdb.NewClient(tempdb.Config{
+		Addr: "0.0.0.0:8081",
+		URL:  "tempdb://admin:Q{)6X!mG[hTK@workspace:cb4552273c5c/ecommerce",
+	})
+	if err != nil {
+		log.Fatalf("Failed to get client: %v", err)
+	}
+	defer client.Close()
 
 	// Example 1: Using raw command string
 	// Get total sales by payment method
-	// result1, err := client.Aggregate("GROUPBY /payment_method SUM /net_amount")
-	// if err != nil {
-	// 	log.Fatalf("error: %v", result1)
-	// }
-	// fmt.Printf("Sales by payment method: %v\n", result1)
+	result1, err := client.Query("GROUPBY /payment_method SUM /net_amount")
+	if err != nil {
+		log.Fatalf("error: %v", result1)
+	}
+	fmt.Printf("Sales by payment method and sum: %v\n", result1)
 
 	// pipeline := tempdb.NewAggregation().Count().Build()
 	// if err != nil {
@@ -67,4 +68,4 @@ package main
 	// if err != nil {
 	// 	log.Fatalf("error: %f", result5)
 	// }
-// }
+}
