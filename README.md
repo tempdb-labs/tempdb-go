@@ -1,16 +1,44 @@
-# Go TempDB Client
+## Go TempDB Client
 
-This is a Go client library for interacting with the TempDB server, an in-memory database designed for flexibility and performance. It provides an interface to connect, store, retrieve, manage, and query data within a TempDB instance.
+The Go TempDB Client is a powerful, lightweight library for interacting with TempDB, an in-memory database optimized for speed, flexibility, and ease of use. TempDB supports multiple data paradigms including key-value storage, document storage, vector operations, and messaging (Pub/Sub, queues, and event streams), making it an ideal choice for real-time applications, analytics, and dynamic workloads.
 
-## Installation
+This client provides a simple Go interface to connect to a TempDB server, manage data, and execute queries with a `QueryBuilder` or `raw command strings`.
 
-To use this client in your Go project, run:
+**Key Features:**
+
+- Multi-paradigm support: Key-value, documents, vectors, and messaging.
+- Thread-safe client pooling for efficient connections.
+- Advanced querying with aggregation, filtering, and joining capabilities.
+
+### Table of Contents
+
+- [Quick Start](#quick-start)
+- [Commands](#commands)
+  - [Key-Value Commands](#key-value-commands)
+  - [Document Commands](#document-commands)
+  - [Vector Commands](#vector-commands)
+  - [Messaging Commands](#messaging-commands)
+- [Querying the Database](#querying-the-database)
+  - [Using Raw Query Strings](#using-raw-query-strings)
+  - [Using QueryBuilder](#using-querybuilder)
+  - [All Query Commands and Filters](#query-commands-and-filters)
+- [More Information](#more-information)
+
+### Quick Start
+
+Get up and running with the Go TempDB Client in minutes. This section demonstrates how to install the library and perform a basic operation.
+
+#### Installation
+
+Add the TempDB client to your Go project:
 
 ```sh
 go get github.com/tempdb-labs/tempdb-go/lib
 ```
 
-## Usage
+#### Example: Storing and Retrieving User Data
+
+Below is a simple example of connecting to TempDB, storing a user object, and retrieving it:
 
 Here's an example of how to initialize and use the TempDB Go client:
 
@@ -23,15 +51,17 @@ import (
 )
 
 func main() {
+	// Initialize the client
 	client, err := tempdb.NewClient(tempdb.Config{
 		Addr: "0.0.0.0:8081",
-		URL:  "tempdb://admin:admin@workspace:8020/ecommerce",
+		URL:  "tempdb://admin:admin@workspace:8020/ecommerce:kv",
 	})
 	if err != nil {
-		log.Fatalf("Failed to get client: %v", err)
+		log.Fatalf("Failed to connect: %v", err)
 	}
 	defer client.Close()
 
+	// Define a user object
 	user := map[string]interface{}{
 		"name":    "Thembinkosi",
 		"surname": "Mkhonta",
@@ -41,42 +71,173 @@ func main() {
 		},
 	}
 
+	// Store the user
 	result, err := client.Store("user_01", user)
 	if err != nil {
-		log.Printf("Failed to store user: %v", err)
-		return
+		log.Fatalf("Failed to store user: %v", err)
 	}
+	log.Printf("User stored: %v", result)
 
-	log.Printf("User stored successfully: %v", result)
+	// Retrieve the user
+	retrieved, err := client.Get("user_01")
+	if err != nil {
+		log.Fatalf("Failed to retrieve user: %v", err)
+	}
+	log.Printf("Retrieved user: %s", retrieved)
 }
 ```
 
-### Key Features and Functions
+**Notes**
 
-- **Client Initialization**: Use `NewClient` with a `Config` struct specifying the server address (`Addr`) and connection URL (`URL`).
-- **Data Storage**: Use `Store` to add structured data (e.g., JSON-like maps) into TempDB.
-- **Data Retrieval**: Use `GetByKey` or `Get` to fetch data by its key.
-- **Session Management**: Commands for creating, fetching, modifying, and deleting sessions.
-- **Batch Operations**: Use `StoreBatch` to insert multiple key-value pairs at once.
-- **Querying**: Use `Query` or `QueryWithBuilder` to perform advanced aggregations and filtering.
+- Replace `Addr` and `URL` with your TempDB server’s configuration.
+- The URL format is `tempdb://<username>:<password>@<workspace>:<port>/<database>:<database_type>`.
+- Always defer client.Close() to return the connection to the pool or close it.
 
-#### Available Commands
+### Commands
 
-TempDB supports a variety of commands for data manipulation and management:
+The TempDB Go Client supports a variety of commands organized by data paradigm. Below is a comprehensive list with their respective methods and use cases.
 
-- `Set`: Store a key-value pair (`SET key value`).
-- `Delete`: Remove a key (`DELETE key`).
-- `View_Data`: View all data in the database (`VIEW_DATA`).
-- `GET_KEY`: Retrieve a key’s value (`GET key`).
-- `Store`: Store structured data (`STORE key value`).
-- `StoreBatch`: Batch insert multiple entries (`STOREBATCH {"key1": "value1", "key2": "value2"}`).
-- `Query`: Execute advanced queries with aggregation and filtering (see below).
+#### Key-Value Commands
 
-View our documentation for full list of commands at [docs.tempdb.xyz](https://docs.tempdb.xyz)
+For basic key-value storage and retrieval:
+
+- **`Set(key, value string) error`**: Stores a simple key-value pair.
+  - Example: `client.Set("name", "Alice")`
+- **`Get(key string) (string, error)`**: Retrieves a value by key.
+  - Example: `value, err := client.Get("name")`
+- **`Delete(key string) (interface{}, error)`**: Deletes a key-value pair.
+  - Example: `client.Delete("name")`
+- **`Store(key string, value interface{}) (interface{}, error)`**: Stores structured data (e.g., JSON-like maps).
+  - Example: `client.Store("user_01", map[string]interface{}{"name": "Bob"})`
+- **`SetEx(key string, seconds int, value interface{}) (interface{}, error)`**: Stores data with an expiration time.
+  - Example: `client.SetEx("temp_key", 60, "temp_value")`
+- **`Get_All_KV() (interface{}, error)`**: Returns all associated data with your key-value database.
+  - Example: `client.Get_All_KV()`
+- **`Batch(entries map[string]interface{}) (interface{}, error)`**: Stores multiple key-value pairs in one operation.
+  - Example: `client.Batch(map[string]interface{}{"k1": "v1", "k2": "v2"})`
+
+#### Document Commands
+
+For document-oriented storage:
+
+- **`InsertDoc(document interface{}) (string, error)`**: Inserts a document and returns its ID.
+  - Example: `docID, err := client.InsertDoc(map[string]interface{}{"name": "John"})`
+- **`GetDoc(docID string) (map[string]interface{}, error)`**: Retrieves a document by ID.
+  - Example: `doc, err := client.GetDoc("doc123")`
+- **`GetAllDocs() ([]map[string]interface{}, error)`**: Retrieves all documents in the collection.
+  - Example: `docs, err := client.GetAllDocs()`
+- **`UpdateDoc(docID string, update interface{}) (map[string]interface{}, error)`**: Updates a document by ID.
+  - Example: `updated, err := client.UpdateDoc("doc123", map[string]interface{}{"age": 31})`
+- **`DeleteDoc(docID string) error`**: Deletes a document by ID.
+  - Example: `client.DeleteDoc("doc123")`
+- **`QueryDocs(filter interface{}) ([]map[string]interface{}, error)`**: Queries documents with a filter.
+  - Example: `docs, err := client.QueryDocs(map[string]interface{}{"age": 30})`
+
+#### Vector Commands
+
+For vector storage and similarity search:
+
+- **`VSet(key string, vector []float32, metadata interface{}) (interface{}, error)`**: Stores a vector with metadata.
+  - Example: `client.VSet("vec1", []float32{1.0, 2.0}, map[string]string{"type": "image"})`
+- **`VGet(key string) (interface{}, error)`**: Retrieves a vector and its metadata.
+  - Example: `vec, err := client.VGet("vec1")`
+- **`VSearch(queryVector []float32, k int) (interface{}, error)`**: Finds the k most similar vectors.
+  - Example: `results, err := client.VSearch([]float32{1.1, 2.1}, 5)`
+
+#### Messaging Commands
+
+For Pub/Sub, queues, and event streams:
+
+- **Pub/Sub:**
+
+  - **`Subscribe(channel string, handler func(message string)) error`**: Subscribes to a channel.
+    - Example: `client.Subscribe("news", func(msg string) { log.Println(msg) })`
+  - **`Unsubscribe(channel string) error`**: Unsubscribes from a channel.
+    - Example: `client.Unsubscribe("news")`
+  - **`Publish(channel, message string) (int, error)`**: Publishes a message to a channel.
+    - Example: `count, err := client.Publish("news", "Hello")`
+  - **`PubSubChannels() (interface{}, error)`**: Lists all active channels.
+    - Example: `channels, err := client.PubSubChannels()`
+
+- **Event Streams:**
+
+  - **`XAdd(streamKey string, data interface{}) (string, error)`**: Adds an entry to a stream.
+    - Example: `id, err := client.XAdd("orders", map[string]string{"item": "phone"})`
+  - **`XRead(streamKey, startID string, count int) ([]map[string]interface{}, error)`**: Reads stream entries.
+    - Example: `entries, err := client.XRead("orders", "0", 10)`
+  - **`XDel(streamKey string) error`**: Deletes a stream.
+    - Example: `client.XDel("orders")`
+
+- **Queues:**
+  - **`Enqueue(queueKey string, message interface{}) error`**: Adds a message to a queue.
+    - Example: `client.Enqueue("tasks", "process_order")`
+  - **`Dequeue(queueKey string) (interface{}, error)`**: Removes and returns a message.
+    - Example: `msg, err := client.Dequeue("tasks")`
+  - **`QPeek(queueKey string) (interface{}, error)`**: Peeks at the next message without removing it.
+    - Example: `msg, err := client.QPeek("tasks")`
+  - **`QLen(queueKey string) (interface{}, error)`**: Returns the queue length.
+    - Example: `length, err := client.QLen("tasks")`
+
+#### Common commands
+
+- **`CLEAR_DB() (interface{}, error)`**: Clears and drops the database.
+  - Example: `clearDb, err := client.CLEAR_DB()`
+- **`VIEW_LOGS() (interface{}, error)`**: Views you own database logs.
+  - Example: `logs, err := client.VIEW_LOGS()`
+
+VIEW_LOGS
+
+### Querying the Database
+
+TempDB supports querying capabilities through the `Query` method (raw strings) or the `QueryBuilder` (fluent API). This section explains both approaches and provides e-commerce case studies.
+
+#### Using Raw Query Strings
+
+The `Query` method accepts a raw command string in the format: `QUERY <operations>`. Use field paths with a `/` prefix (e.g., `/name`).
+
+**Syntax**
+
+- **Aggregations**: `COUNT`, `SUM /field`, `AVG /field`, `GROUPBY /field`, etc.
+- **Filters**: `FILTER /field operator value` (e.g., `FILTER /age gt 25`).
+- **Order**: Combine operations with spaces (e.g., `FILTER /age gt 25 GROUPBY /city COUNT`).
+
+##### Example: Total Sales by Category
+
+```go
+result, err := client.Query("GROUPBY /category SUM /net_amount")
+if err != nil {
+    log.Printf("Error: %v", err)
+} else {
+    log.Printf("Sales by category: %v", result) // e.g., {"category": {"Electronics": 5000, "Clothing": 3000}}
+}
+
+```
+
+#### Using QueryBuilder
+
+The `QueryBuilder` provides a programmatic way to construct queries with `method chaining`. It’s ideal for complex logic and maintainability.
+
+**Syntax**
+
+- Start with `NewQuery()`.
+- Chain methods like `.Filter(), .GroupBy(), .Sum()`, etc.
+- Finalize with `.Build()` or pass directly to `QueryWithBuilder()`.
+
+  **Example: Average Purchase by Gender**
+
+```go
+builder := tempdb.NewQuery().
+    GroupBy("gender").
+    Average("net_amount")
+result, err := client.QueryWithBuilder(builder)
+if err != nil {
+    log.Printf("Error: %v", err)
+} else {
+    log.Printf("Average by gender: %v", result) // e.g., {"avg_net_amount": {"Male": 1500, "Female": 1800}}
+}
+```
 
 #### Query Commands and Filters
-
-The `QUERY` command supports powerful aggregation and filtering operations. Use field paths with a `/` prefix (e.g., `/name`).
 
 ##### Aggregation Operations
 
@@ -116,113 +277,18 @@ Used with `FILTER /field operator value`:
 - `like`: Matches a wildcard pattern (e.g., `%son`).
 - `isnull`: Field is null.
 
-### Query Builder Usage
-
-The `QueryBuilder` provides a fluent interface to construct `QUERY` commands programmatically. Here’s how to use it:
-
-#### Example 1: Simple Count
-
-Count all entries:
-
-```go
-builder := tempdb.NewQuery().Count()
-result, err := client.QueryWithBuilder(builder)
-if err != nil {
-    log.Printf("Error: %v", err)
-} else {
-    log.Printf("Total entries: %v", result) // {"count": <number>}
-}
-```
-
-#### Example 2: Filter and Sum
-
-Sum the gross amount for purchases in Ahmedabad:
-
-```go
-builder := tempdb.NewQuery().
-    FilterEquals("Location", "Ahmedabad").
-    Sum("Gross Amount")
-result, err := client.QueryWithBuilder(builder)
-if err != nil {
-    log.Printf("Error: %v", err)
-} else {
-    log.Printf("Total Gross Amount: %v", result) // {"sum_Gross Amount": <value>}
-}
-```
-
-#### Example 3: Median with Range Filter
-
-Find the median net amount for discounts between 50 and 100 INR:
-
-```go
-builder := tempdb.NewQuery().
-    FilterBetween("Discount Amount (INR)", "50", "100").
-    Median("Net Amount")
-result, err := client.QueryWithBuilder(builder)
-if err != nil {
-    log.Printf("Error: %v", err)
-} else {
-    log.Printf("Median Net Amount: %v", result) // {"median_Net Amount": <value>}
-}
-```
-
-#### Example 4: Sort and TopN
-
-Get the top 3 purchases sorted by gross amount:
-
-```go
-builder := tempdb.NewQuery().
-    Sort("Gross Amount", "desc").
-    TopN(3, "Gross Amount")
-result, err := client.QueryWithBuilder(builder)
-if err != nil {
-    log.Printf("Error: %v", err)
-} else {
-    log.Printf("Top 3 Gross Amounts: %v", result) // {"top_3_Gross Amount": [<value>, ...]}
-}
-```
-
-#### Example 5: Join with Filter
-
-Join purchases with a "users" key and count female customers:
-
-```go
-builder := tempdb.NewQuery().
-    Join("users", "samCID", "samCID").
-    FilterEquals("Gender", "Female").
-    Count()
-result, err := client.QueryWithBuilder(builder)
-if err != nil {
-    log.Printf("Error: %v", err)
-} else {
-    log.Printf("Female Customers: %v", result) // {"count": <number>}
-}
-```
-
-### Direct Query Example
-
-You can also use the `Query` method directly for raw commands:
-
-```go
-result, err := client.Query("QUERY FILTER /Product Category eq Electronics STDDEV /Net Amount")
-if err != nil {
-    log.Printf("Error: %v", err)
-} else {
-    log.Printf("StdDev of Electronics Net Amount: %v", result) // {"stddev_Net Amount": <value>}
-}
-```
-
-### Notes
+### NB
 
 - **Field Paths**: Use `/field` for nested fields (e.g., `/preferences/mode`).
 - **Error Handling**: Always check `err` and cast `result` to the expected type (e.g., `map[string]interface{}`) based on your server’s response.
 - **Chaining**: `QueryBuilder` methods return the builder, enabling method chaining for complex queries.
 
-This client integrates seamlessly with TempDB’s standalone and cloud deployments, offering a robust way to interact with your data.
+### More Information
 
-### What’s Added
+For detailed documentation, additional examples, and TempDB server setup instructions, visit:
 
-- **Commands Section**: Lists all available commands, including basic operations like `Set`, `Delete`, and the new `Query`-related ones.
-- **Query Commands and Filters**: Details all aggregation operations and filter operators, reflecting the latest additions (`Median`, `StdDev`, `Sort`, `Join`, `between`, `like`, `isnull`).
-- **Query Builder Usage**: Includes five examples using `QueryWithBuilder` and one with `Query`, tied to your sample purchase data.
-- **General Info**: Expands on features and provides context for TempDB’s capabilities.
+- **Official Documentation**: [docs.tempdb.xyz](https://docs.tempdb.xyz)
+- **GitHub Repository**: [github.com/tempdb-labs/tempdb-go](https://github.com/tempdb-labs/tempdb-go)
+- **Support**: Reach out via GitHub issues or email `mkhonta@tempdb.xyz`.
+
+Stay updated with the latest features and contribute to the project on GitHub!

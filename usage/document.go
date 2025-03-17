@@ -1,17 +1,15 @@
+// / This package contains document database type commands.
+// / for examples you need, simple uncomment and then start using them
 package main
-
-// import (
-// 	"log"
-
-// 	tempdb "github.com/tempdb-labs/tempdb-go/lib"
-// )
 
 // func main() {
 
 // 	client, err := tempdb.NewClient(tempdb.Config{
 // 		Addr: "0.0.0.0:8081",
-// 		URL:  "tempdb://admin:admin@workspace:8020/ecommerce-docs",
+// 		// Addr: "tempdb1.tempdb.xyz:8081",
+// 		URL: "tempdb://admin:5M!d$7pG68;5@workspace:890cbc66ca3b/ecommerce",
 // 	})
+
 // 	if err != nil {
 // 		log.Fatalf("Failed to get client: %v", err)
 // 	}
@@ -24,7 +22,6 @@ package main
 // 		"email": "john@example.com",
 // 	}
 // 	docID, err := client.InsertDoc(doc)
-	
 
 // 	log.Println("document id ", docID)
 
@@ -39,12 +36,4 @@ package main
 // 	}
 // 	updatedDoc, err := client.UpdateDoc(docID, update)
 // 	log.Println("updatedDoc doc: ", updatedDoc)
-
-// 	// Query documents
-// 	filter := map[string]interface{}{
-// 		"age": 31,
-// 	}
-// 	matchingDocs, err := client.QueryDocs(filter)
-// 	log.Println("matchingDocs doc: ", matchingDocs)
-
 // }

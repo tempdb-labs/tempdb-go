@@ -1,8 +1,8 @@
+// This is a test example and you can run it to store data constantly.
 package main
 
 import (
 	"encoding/csv"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -12,13 +12,10 @@ import (
 )
 
 func main() {
-	Connect1()
-}
 
-func Connect1() {
 	client, err := tempdb.NewClient(tempdb.Config{
-		Addr: "34.19.100.104:8081",
-		URL:  "tempdb://admin:Q{)6X!mG[hTK@workspace:cb4552273c5c/ecommerce",
+		Addr: "tempdb1.tempdb.xyz:8081",
+		URL:  "<your-url-here>",
 	})
 	if err != nil {
 		log.Fatalf("failed to connect to client: %v", err)
@@ -94,13 +91,13 @@ func Connect1() {
 			}
 		}
 
-		timestamp := time.Now().UnixNano()
-		key := fmt.Sprintf("product_%d", timestamp)
+		// timestamp := time.Now().UnixNano()
+		// key := fmt.Sprintf("product_%d", timestamp)
 
-		response, err := client.Store(key, product)
+		response, err := client.InsertDoc(product)
 		if err != nil {
 			log.Printf("error storing product info: %v", err)
 		}
-		log.Printf("stored product with key %s, response: %v\n", key, response)
+		log.Printf("stored product with response: %v\n", response)
 	}
 }
