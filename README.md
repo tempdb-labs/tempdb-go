@@ -54,7 +54,7 @@ func main() {
 	// Initialize the client
 	client, err := tempdb.NewClient(tempdb.Config{
 		Addr: "0.0.0.0:8081",
-		URL:  "tempdb://admin:admin@workspace:8020/ecommerce:kv",
+		URL:  "tempdb://admin:admin@users:kv",
 	})
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
@@ -90,7 +90,7 @@ func main() {
 **Notes**
 
 - Replace `Addr` and `URL` with your TempDB server’s configuration.
-- The URL format is `tempdb://<username>:<password>@<workspace>:<port>/<database>:<database_type>`.
+- The URL format is `tempdb://<username>:<password>@<database>:<database_type>`.
 - Always defer client.Close() to return the connection to the pool or close it.
 
 ### Commands

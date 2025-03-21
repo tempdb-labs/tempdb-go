@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/csv"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -14,8 +15,8 @@ import (
 func main() {
 
 	client, err := tempdb.NewClient(tempdb.Config{
-		Addr: "tempdb1.tempdb.xyz:8081",
-		URL:  "<your-url-here>",
+		Addr: "0.0.0.0:8081",
+		URL:  "tempdb://admin:{n4s*4IJ&fch@tempdb:kv",
 	})
 	if err != nil {
 		log.Fatalf("failed to connect to client: %v", err)
@@ -45,7 +46,7 @@ func main() {
 	for range ticker.C {
 		record := records[time.Now().UnixNano()%int64(len(records))]
 
-		product := make(map[string]interface{})
+		product := make(map[string]any)
 		for i, value := range record {
 			value = strings.TrimSpace(value)
 			if value == "" {
@@ -91,10 +92,10 @@ func main() {
 			}
 		}
 
-		// timestamp := time.Now().UnixNano()
-		// key := fmt.Sprintf("product_%d", timestamp)
+		timestamp := time.Now().UnixNano()
+		key := fmt.Sprintf("product_%d", timestamp)
 
-		response, err := client.InsertDoc(product)
+		response, err := client.Store(key, product)
 		if err != nil {
 			log.Printf("error storing product info: %v", err)
 		}
