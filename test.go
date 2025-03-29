@@ -15,8 +15,8 @@ import (
 func main() {
 
 	client, err := tempdb.NewClient(tempdb.Config{
-		Addr: "0.0.0.0:8081",
-		URL:  "tempdb://admin:{n4s*4IJ&fch@tempdb:kv",
+		Addr: "tempdb1.tempdb.xyz:8081",
+		URL:  "<url here>",
 	})
 	if err != nil {
 		log.Fatalf("failed to connect to client: %v", err)

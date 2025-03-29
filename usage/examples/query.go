@@ -1,5 +1,8 @@
 // / This package also shows examples on how to use query builder functions instead of raw commands.
-package main
+// You can use the data.csv file located at /data.csv and run the /test.go which will store data into your database
+// The data contains some ecommerce csv values, in which the queries below are based on that data
+
+package usage
 
 import (
 	"fmt"
@@ -8,16 +11,7 @@ import (
 	tempdb "github.com/tempdb-labs/tempdb-go/lib"
 )
 
-func main() {
-	client, err := tempdb.NewClient(tempdb.Config{
-		Addr: "0.0.0.0:8081",
-		URL:  "tempdb://admin:Q{)6X!mG[hTK@workspace:cb4552273c5c/ecommerce",
-	})
-	if err != nil {
-		log.Fatalf("Failed to get client: %v", err)
-	}
-	defer client.Close()
-
+func QueryCommand(client *tempdb.TempDBClient) {
 	// Example 1: Using raw command string
 	// Get total sales by payment method
 	result1, err := client.Query("GROUPBY /payment_method SUM /net_amount")
